@@ -1,0 +1,41 @@
+﻿@if(CategoriesDto == null && MsgError == null)
+{
+    <ShowSpinner/>
+}else if (MsgError!=null)
+{
+    <ShowError MsgError="@MsgError"></ShowError>
+}
+else
+{
+    @foreach (var category in CategoriesDto)
+    {
+        var link = "/ProductsByCategory/" + category.Id;
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="@link">
+                <span class="@category.IconCSS" aria-hidden="true"></span>&nbsp; @category.Name
+            </NavLink>
+        </div>
+    }
+}
+
+
+@code{
+    [Inject]
+    public IProductService? ProductService{ get; set; }
+
+    public IEnumerable<CategoryDto>? CategoriesDto{ get; set; }
+
+    public string? MsgError { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            CategoriesDto = await ProductService.GetCategories();
+        }
+        catch (Exception ex)
+        {
+            MsgError = ex.Message;
+        }
+    }
+}

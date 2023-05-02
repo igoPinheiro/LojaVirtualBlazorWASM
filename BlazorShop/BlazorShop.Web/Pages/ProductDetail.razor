@@ -1,0 +1,111 @@
+﻿@page "/ProductDetail/{Id:int}"
+
+@if (Product is null && MsgError is null)
+{
+    <ShowSpinner></ShowSpinner>
+}
+else if (MsgError is not null)
+{
+    <ShowError MsgError="@MsgError"></ShowError>
+}
+else
+{
+    <h3 class="mb-5">Detalhes do Produto</h3>
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <img class="img-fluid" src="@Product?.ImageUrl">
+        </div>
+        <div class="col-md-6">
+            <h3>@Product?.Name</h3>
+            <p class="mb-4">@Product?.Description</p>
+            <p class="mb-4">
+                <b>
+                    @Product?.Price.ToString("c")&nbsp; (@Product?.Qtd items em estoque)
+                </b>
+            </p>
+            <div>
+                <button class="btn btn-success"
+                    @onclick="()=> AddItemToCart_Click(new CartItemAddDto
+                       {
+                           CartId = LoggedUser.CartId,
+                           ProductId = Product.Id,
+                           Qtd  = 1
+                       })">
+                    Incluir no Carrinho
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Inject]
+    public IProductService? productService { get; set; }
+
+    [Inject]
+    public IShoppingCartService? shoppingCartService { get; set; }
+
+    [Inject]
+    public NavigationManager? NavigationManager { get; set; }
+
+    [Inject]
+    public IManageLocalStorageProducts ManageLocalStorageProducts { get; set; }
+
+    [Inject]
+    public IManageLocalStorageShoppingCart ManageLocalStorageShoppingCart { get; set; }
+
+    private List<CartItemDto> CartItems { get; set; }
+
+    [Parameter]
+    public int Id { get; set; }
+
+    public ProductDto? Product { get; set; }
+
+    public string? MsgError { get; set; }
+
+    protected async Task AddItemToCart_Click(CartItemAddDto cartItemAddDto)
+    {
+        try
+        {
+            var cartItemDto = await shoppingCartService.AddItem(cartItemAddDto);
+
+            if (cartItemDto != null)
+            {
+                CartItems.Add(cartItemDto);
+                await ManageLocalStorageShoppingCart.SaveCollection(CartItems);
+            }
+
+            NavigationManager.NavigateTo("/ShoppingCart");
+        }
+        catch (Exception)
+        {
+
+            throw;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            CartItems = await ManageLocalStorageShoppingCart.GetCollection();
+
+
+            Product = await GetProductById(Id);
+        }
+        catch (Exception ex)
+        {
+            MsgError = ex.Message;
+        }
+    }
+
+    private async Task<ProductDto> GetProductById(int id)
+    {
+        var prod = await ManageLocalStorageProducts.GetCollection();
+
+        if (prod != null)
+            return prod.SingleOrDefault(p => p.Id == id);
+
+        return null;
+    }
+}

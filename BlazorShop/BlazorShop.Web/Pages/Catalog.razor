@@ -1,0 +1,69 @@
+﻿@page "/products"
+
+@inject IProductService productService
+
+@if (Products == null)
+{
+   <ShowSpinner/>
+}
+else
+{
+    <h3 class="mb-5">Produtos></h3>
+    @if (Products.Count()>0)
+    {
+        var productByCategory = from product in Products
+                                group product by product.CategoryId into prodByCat
+                                orderby prodByCat.Key
+                                select prodByCat;
+        @foreach (var prodGp in productByCategory)
+        {
+            <h4>@prodGp.FirstOrDefault(pg=> pg.CategoryId == prodGp.Key)?.CategoryName</h4>
+            <div class="row mt-3">
+                <ShowProducts Products="@prodGp"></ShowProducts>
+            </div>
+            <hr class="mb-2"/>
+        }        
+    }
+}
+
+@code {
+    public IEnumerable<ProductDto>? Products { get; set; }
+
+    [Inject]
+    public IShoppingCartService? ShoppingCartService { get; set; }
+
+    [Inject]
+    public IManageLocalStorageProducts ManageLocalStorageProducts { get; set; }
+
+    [Inject]
+    public IManageLocalStorageShoppingCart ManageLocalStorageShoppingCart { get; set; }
+
+    public string? MsgError { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await ClearLocalStorage();
+
+            Products = await ManageLocalStorageProducts.GetCollection();
+
+            var shoppingCartItems = await ManageLocalStorageShoppingCart.GetCollection();
+
+            var totalQtd = shoppingCartItems.Sum(s => s.Qtd);
+
+            ShoppingCartService.RaiseEventOnShoppingCartChanged(totalQtd);
+        }
+        catch (Exception ex)
+        {
+            MsgError = ex.Message;
+        }
+        
+    }
+
+    private async Task ClearLocalStorage()
+    {
+        await ManageLocalStorageProducts.RemoveCollection();
+        await ManageLocalStorageShoppingCart.RemoveCollection();
+    }
+}

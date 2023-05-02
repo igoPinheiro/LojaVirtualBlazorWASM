@@ -1,0 +1,68 @@
+﻿@page "/ProductsByCategory/{CategoryId:int}"
+
+@if(ProductsDto == null && MsgError == null)
+{
+    <ShowSpinner/>
+}
+else if(MsgError!=null)
+{
+ <ShowError MsgError="@MsgError"/>   
+}else{
+    <h3> Produtos (@CategoryName)</h3>
+
+    @if (ProductsDto.Any())
+    {
+        <div class="row mt-3">
+            <ShowProducts Products="@ProductsDto"/>
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public int CategoryId { get; set; }
+
+    [Inject]
+    public IProductService? ProductService { get; set; }
+
+    [Inject]
+    public IManageLocalStorageProducts ManageLocalStorageProducts { get; set; }
+
+    public IEnumerable<ProductDto>? ProductsDto { get; set; }
+
+    public string? MsgError { get; set; }
+
+    public string? CategoryName { get; set; }
+
+    // Este metodo é inicializado quando ele recebe o parametro
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            ProductsDto = await GetProductsCollectionByCategoryId(CategoryId);
+
+            if (ProductsDto.Any())
+            {
+                var productDto = ProductsDto.FirstOrDefault(p => p.CategoryId == CategoryId);
+                if (productDto != null)
+                    CategoryName = productDto.CategoryName;
+            }
+        }
+        catch (Exception ex)
+        {
+            MsgError = ex.Message;
+        }      
+    }
+
+    private async Task<IEnumerable<ProductDto>> GetProductsCollectionByCategoryId(int categoryId)
+    {
+        var prodCollection = await ManageLocalStorageProducts.GetCollection();
+
+        if (prodCollection != null)
+            return prodCollection.Where(w => w.CategoryId == categoryId);
+
+        return await ProductService.GetItemsByCategory(categoryId);
+    }
+
+}
+

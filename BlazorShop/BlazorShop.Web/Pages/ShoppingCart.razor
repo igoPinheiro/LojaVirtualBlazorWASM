@@ -1,0 +1,206 @@
+﻿@page "/ShoppingCart"
+
+@inject IJSRuntime JS;
+
+@if (CartItemDtos is null && MsgError is null)
+{
+    <ShowSpinner></ShowSpinner>
+}
+else if (MsgError is not null)
+{
+    <ShowError MsgError="@MsgError"></ShowError>
+}
+else
+{
+    <h3 class="mb-5">Carrinho</h3>
+    @if (CartItemDtos.Count > 0)
+    {
+        <div class="row mb-5">
+            <div class="col-md-9">
+                @foreach (var item in CartItemDtos)
+                {
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <img src="@item.ProductImageUrl" width="250" class="img-thumbnail">
+                        </div>
+                        <div class="col-md-9">
+                            <h5>@item.ProductName</h5>
+                            <div class="mb-4">
+                                @item.ProductDescription
+                            </div>
+                            <span> Preço: <b>@item.Price.ToString("C")</b>
+                               <input @oninput="()=>UpdateQtd_Input(item.Id)" type="number" @bind="@item.Qtd"/>
+                                <button data-itemId="@item.Id" class="btn btn-info btn-sm updateqtd" @onclick="(()=> UpdateQtdCartItem_Click(item.Id,item.Qtd))">
+                                    <i class="oi oi-check"></i>
+                                </button>
+                                <br>
+                                <button @onclick="(()=> DeleteCartItem_Click(item.Id))" class="btn btn-danger sm">
+                                    <span class="oi oi-trash"></span>
+                                </button>
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="col-md-3">
+                <h5>Carrinho - Resumo</h5>
+                <div class="mt-2">
+                    <div>Total - (@QtdItems items)&nbsp; <br/> <b>@PriceTotal</b></div>
+                    <a href="#" class="btn btn-success">
+                        <span class="oi oi-credit-card"></span>&nbsp; Fechar Pedido
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div>
+            <h3>
+                <b>
+                    O Seu Carrinho está Vazio!
+                </b>
+            </h3>
+        </div>
+    }
+}
+
+@code {
+    [Inject]
+    public IShoppingCartService? ShoppingCartService { get; set; }
+
+    [Inject]
+    public IManageLocalStorageProducts ManageLocalStorageProducts { get; set; }
+
+    [Inject]
+    public IManageLocalStorageShoppingCart ManageLocalStorageShoppingCart { get; set; }
+
+    public List<CartItemDto> CartItemDtos { get; set; }
+
+    public string? MsgError { get; set; }
+
+    protected string? PriceTotal { get; set; }
+    protected int QtdItems { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            CartItemDtos = await ManageLocalStorageShoppingCart.GetCollection();
+
+            ShoppingCartChanged();
+        }
+        catch (Exception e)
+        {
+            MsgError = e.Message;
+        }
+    }
+
+    protected async Task DeleteCartItem_Click(int id)
+    {
+        try
+        {
+            // excluir item no banco de dados
+            var cartItemDto = await ShoppingCartService.DeleteItem(id);
+
+            // remoçao do item da coleção da memoria no cliente
+            await RemoveCartItem(cartItemDto.Id);
+
+            ShoppingCartChanged();
+        }
+        catch (Exception)
+        {
+
+            throw;
+        }
+    }
+
+    protected async Task UpdateQtdCartItem_Click(int id, int qtd)
+    {
+        try
+        {
+            if (qtd > 0)
+            {
+                var updItemDto = new CartItemUpdateQtdDto
+                {
+                    CartItemId = id,
+                    Qtd = qtd
+                };
+
+                var returnItemUpdtDto = await ShoppingCartService.UpdateQtd(updItemDto);
+
+                UpdatePriceTotalItem(returnItemUpdtDto);
+
+                ShoppingCartChanged();
+
+                await JS.InvokeVoidAsync("MakeUpdateQuantityVisibleButton", id, false);
+            }
+            else
+            {
+                var item = CartItemDtos.FirstOrDefault(i => i.Id == id);
+                if (item != null)
+                {
+                    item.Qtd = 1;
+                    item.Total = item.Price;
+                }
+            }
+
+        }
+        catch (Exception)
+        {
+
+            throw;
+        }
+    }
+
+    private CartItemDto GetCartItem(int id)
+    {
+        return CartItemDtos.FirstOrDefault(f => f.Id == id);
+    }
+
+    private async Task RemoveCartItem(int id)
+    {
+        var cartItemDto = GetCartItem(id);
+        CartItemDtos.Remove(cartItemDto);
+
+        await ManageLocalStorageShoppingCart.SaveCollection(CartItemDtos);
+    } 
+
+    private void SetPriceTotal()
+    {
+        PriceTotal = CartItemDtos.Sum(p => p.Total).ToString("C");
+    }
+
+    private void SetQtdTotal()
+    {
+        QtdItems = CartItemDtos.Sum(s => s.Qtd);
+    }
+
+    private void CalculateSummaryCartTotal()
+    {
+        SetPriceTotal();
+        SetQtdTotal();
+    }
+
+    private async Task UpdatePriceTotalItem(CartItemDto cartItemDto)
+    {
+        var item = GetCartItem(cartItemDto.Id);
+
+        if (item != null)
+            item.Total = cartItemDto.Price * cartItemDto.Qtd;
+
+        await ManageLocalStorageShoppingCart.SaveCollection(CartItemDtos);
+    }
+
+    protected async Task UpdateQtd_Input(int id)
+    {
+        await JS.InvokeVoidAsync("MakeUpdateQuantityVisibleButton",id,true);
+    }
+
+    private void ShoppingCartChanged()
+    {
+        CalculateSummaryCartTotal();
+        ShoppingCartService.RaiseEventOnShoppingCartChanged(QtdItems);
+    }
+
+}
